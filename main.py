@@ -1,87 +1,55 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.fft import fft2, fftshift, ifft2
-from scipy.ndimage import sobel
+from scipy.fft import fft2, fftshift
 import imageio.v2 as imageio
+import os
+import pandas as pd
 
-# Load the image
-image_path = 'images/BellPepper/3.jpg'
-Bichoo_RGB = imageio.imread(image_path)
-M, N, _ = Bichoo_RGB.shape
+directory = 'images/BellPepper'
+temp = [f for f in os.listdir(directory) if f.endswith('.jpg')]
 
-# Display the original image
-plt.figure()
-plt.imshow(Bichoo_RGB)
-plt.title('Original Image')
-plt.axis('off')
+directory = 'images/BellPepper/'
 
-# Extract RGB channels and convert to double
-R_i = Bichoo_RGB[:, :, 0].astype(np.float64)
-G_j = Bichoo_RGB[:, :, 1].astype(np.float64)
-B_k = Bichoo_RGB[:, :, 2].astype(np.float64)
+file_paths = list(map(lambda x: directory + x, temp))
+# print(file_paths)
 
 # Function to compute and plot FFT spectrum
-def plot_fft_spectrum(channel, title):
-    FaFT = fft2(channel)
-    cFaFT = fftshift(FaFT)
-    pFaFT = np.abs(cFaFT)
-    plt.figure()
-    plt.imshow(np.log(1 + pFaFT), extent=(-M/2, M/2, -N/2, N/2), aspect='auto')
-    plt.title(f'Espectro de potencia {title}')
-    plt.xlabel('frecuencias horizontales')
-    plt.ylabel('frecuencias verticales')
-    plt.colorbar()
-    plt.gca().set_aspect('auto')
+def compute_combined_fft(image_path):
+    Bichoo_RGB = imageio.imread(image_path)
+    M, N, _ = Bichoo_RGB.shape
+    
+    R_i = Bichoo_RGB[:, :, 0].astype(np.float64)
+    G_j = Bichoo_RGB[:, :, 1].astype(np.float64)
+    B_k = Bichoo_RGB[:, :, 2].astype(np.float64)
+    
+    haproof = fft2(R_i)
+    z = 1j
+    hctemp = B_k * z
+    hdtemp = G_j
+    sumgb = hdtemp + hctemp
 
-# Plot FFT spectrum for R, G, B channels
-plot_fft_spectrum(R_i, 'R')
-plot_fft_spectrum(G_j, 'G')
-plot_fft_spectrum(B_k, 'B')
+    hbproof = fft2(sumgb)
+    hbtemp = hbproof * z
 
-# Compute FT(R*i)
-haproof = fft2(R_i)
-z = 1j  # imaginary unit
-hctemp = B_k * z
-hdtemp = G_j
-sumgb = hdtemp + hctemp
+    QFT = haproof + hbtemp
+    cQFT = fftshift(QFT)
+    pQFT = np.abs(cQFT)
+    
+    # Flatten the spectrum into a feature vector
+    feature_vector = np.log(1 + pQFT).flatten()
+    
+    return feature_vector
 
-# Compute FT(G + B*i)
-hbproof = fft2(sumgb)
-hbtemp = hbproof * z
+# Generate a list of dummy labels, same length as file_paths
+limited_filepaths = file_paths[:10]
+labels = ['Ripe']
+# Compute feature vectors
+features = [compute_combined_fft(img_path) for img_path in limited_filepaths]
 
-# Combine FT results
-QFT = haproof + hbtemp
-cQFT = fftshift(QFT)
-pQFT = np.abs(cQFT)
-plt.figure()
-plt.imshow(np.log(1 + pQFT), extent=(-M/2, M/2, -N/2, N/2), aspect='auto')
-plt.title('Espectro de potencia RGB')
-plt.xlabel('frecuencias horizontales')
-plt.ylabel('frecuencias verticales')
-plt.colorbar()
-plt.gca().set_aspect('auto')
+# Create a DataFrame to store features and labels
+df = pd.DataFrame(features)
+df['label'] = labels
 
-# Apply inverse FFT
-IQFT = ifft2(QFT)
-IQFTrp = np.abs(IQFT)
+# Save the DataFrame to a CSV file
+df.to_csv('fft_features.csv', index=False)
 
-plt.figure()
-plt.imshow(IQFTrp, cmap='gray')
-plt.title('Inverse FFT Image')
-plt.axis('off')
-
-# Apply Sobel filters
-H1 = sobel(IQFT, axis=0, mode='constant')
-H2 = sobel(IQFT, axis=1, mode='constant')
-
-plt.figure()
-plt.imshow(np.abs(H1), cmap='gray')
-plt.title('Sobel Filter H1')
-plt.axis('off')
-
-plt.figure()
-plt.imshow(np.abs(H2), cmap='gray')
-plt.title('Sobel Filter H2')
-plt.axis('off')
-
-plt.show()
+print("Feature vectors saved to fft_features.csv")

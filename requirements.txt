@@ -2,3 +2,6 @@ numpy
 scipy
 matplotlib
 imageio
+pandas
+scikit-learn
+pillow
